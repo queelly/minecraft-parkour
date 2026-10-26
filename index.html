@@ -1,0 +1,855 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>CRAFT PARKOUR — Воксельный Спидран 3D</title>
+  <!-- Подключение официального SDK Яндекс Игр v2 -->
+  <script src="https://yandex.ru/games/sdk/v2"></script>
+  <style>
+    /* ════════════════════════════════════════════════════════════════════════
+       БРЕНДБУК «CRAFT PARKOUR: SHADER EDITION»
+       Аутентичная воксельная эстетика Minecraft Dungeons / Bedrock UI:
+       - Объёмные каменные и древесные фаски (3D Bevel Borders)
+       - Золотые и изумрудные кнопки с тактильным вдавливанием
+       - Иллюстрированные карточки биомов и хотбар игрока внизу экрана
+       ════════════════════════════════════════════════════════════════════════ */
+    :root {
+      --mc-stone-bg: #262423;
+      --mc-stone-panel: #363331;
+      --mc-stone-light: #524d4a;
+      --mc-stone-dark: #181615;
+      --mc-wood-bg: #5c3a21;
+      --mc-wood-border: #8c5832;
+      --mc-green-top: #4ade80;
+      --mc-green-main: #22c55e;
+      --mc-green-bottom: #15803d;
+      --mc-gold-top: #fde047;
+      --mc-gold-main: #f59e0b;
+      --mc-gold-bottom: #b45309;
+      --mc-crimson-main: #ef4444;
+      --mc-crimson-bottom: #991b1b;
+      --mc-text: #fefefe;
+      --mc-text-muted: #d6d3d1;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-touch-callout: none;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: #181615;
+      font-family: "Trebuchet MS", "Segoe UI", Roboto, system-ui, sans-serif;
+      color: var(--mc-text);
+      touch-action: none;
+    }
+
+    #game-container {
+      position: fixed;
+      inset: 0;
+      z-index: 1;
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    /* Каноничный крестообразный прицел Minecraft */
+    #crosshair {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      width: 18px;
+      height: 18px;
+      transform: translate(-50%, -50%);
+      z-index: 5;
+      pointer-events: none;
+      display: none;
+      mix-blend-mode: difference;
+    }
+    #crosshair::before, #crosshair::after {
+      content: '';
+      position: absolute;
+      background: rgba(255, 255, 255, 0.92);
+    }
+    #crosshair::before { top: 8px; left: 0; width: 18px; height: 2px; }
+    #crosshair::after { top: 0; left: 8px; width: 2px; height: 18px; }
+
+    /* Всплывающее игровое достижение в стиле Minecraft Advancement! */
+    #toast-banner {
+      position: fixed;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%) translateY(-120px);
+      background: var(--mc-stone-bg);
+      border-top: 3px solid #6e6a66;
+      border-left: 3px solid #6e6a66;
+      border-right: 3px solid #141211;
+      border-bottom: 4px solid #141211;
+      outline: 2px solid #000;
+      padding: 10px 22px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-weight: 800;
+      font-size: 15px;
+      color: #fde047;
+      text-shadow: 2px 2px 0 #000;
+      box-shadow: 0 10px 24px rgba(0, 0, 0, 0.65);
+      transition: transform 0.28s cubic-bezier(0.18, 0.89, 0.32, 1.28);
+      pointer-events: none;
+      z-index: 25;
+    }
+    #toast-banner.visible {
+      transform: translateX(-50%) translateY(0);
+    }
+    #toast-banner::before {
+      content: '★';
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 26px;
+      height: 26px;
+      background: #15803d;
+      border: 2px solid #4ade80;
+      color: #fef08a;
+      font-size: 16px;
+    }
+
+    /* ════════════════════════════════════════════════════════════════════════
+       HUD ВО ВРЕМЯ ЗАБЕГА + ХОТБАР MINECRAFT ВНИЗУ
+       ════════════════════════════════════════════════════════════════════════ */
+    #hud {
+      position: fixed;
+      inset: 0;
+      z-index: 10;
+      pointer-events: none;
+      display: none;
+      padding: 16px 22px;
+    }
+
+    .hud-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+    }
+
+    .mc-plaque {
+      background: rgba(38, 36, 35, 0.88);
+      border-top: 3px solid var(--mc-stone-light);
+      border-left: 3px solid var(--mc-stone-light);
+      border-right: 3px solid var(--mc-stone-dark);
+      border-bottom: 4px solid var(--mc-stone-dark);
+      outline: 2px solid #000;
+      padding: 10px 16px;
+      box-shadow: 0 6px 0 rgba(0, 0, 0, 0.45);
+      text-shadow: 2px 2px 0 #000;
+    }
+
+    .hud-timer {
+      font-size: 30px;
+      font-weight: 900;
+      font-variant-numeric: tabular-nums;
+      color: #fde047;
+      letter-spacing: 1px;
+    }
+
+    .hud-sub {
+      font-size: 13px;
+      color: #e7e5e4;
+      margin-top: 3px;
+      font-weight: 700;
+    }
+
+    /* Аутентичный хотбар Minecraft внизу экрана */
+    .mc-hotbar-wrap {
+      position: fixed;
+      bottom: 14px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .mc-xp-bar {
+      width: 280px;
+      height: 8px;
+      background: #1c1917;
+      border: 2px solid #000;
+      position: relative;
+      overflow: hidden;
+    }
+    .mc-xp-fill {
+      width: 100%;
+      height: 100%;
+      background: repeating-linear-gradient(
+        90deg,
+        #84cc16 0px,
+        #84cc16 14px,
+        #4d7c0f 14px,
+        #4d7c0f 16px
+      );
+    }
+
+    .mc-hotbar {
+      display: flex;
+      background: rgba(28, 25, 23, 0.92);
+      border: 3px solid #78716c;
+      outline: 2px solid #000;
+      padding: 2px;
+      gap: 2px;
+      box-shadow: 0 6px 16px rgba(0, 0, 0, 0.65);
+    }
+    .mc-slot {
+      width: 46px;
+      height: 46px;
+      background: #44403c;
+      border-top: 2px solid #292524;
+      border-left: 2px solid #292524;
+      border-right: 2px solid #78716c;
+      border-bottom: 2px solid #78716c;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      position: relative;
+    }
+    .mc-slot.active-slot {
+      outline: 3px solid #f8fafc;
+      z-index: 2;
+      background: #57534e;
+    }
+    .mc-slot span {
+      font-size: 9px;
+      font-weight: 900;
+      color: #fde047;
+      text-shadow: 1px 1px 0 #000;
+      margin-top: 1px;
+    }
+
+    /* ════════════════════════════════════════════════════════════════════════
+       МОБИЛЬНОЕ УПРАВЛЕНИЕ
+       ════════════════════════════════════════════════════════════════════════ */
+    #mobile-controls {
+      position: fixed;
+      inset: 0;
+      z-index: 12;
+      pointer-events: none;
+      display: none;
+    }
+    #joystick-zone {
+      position: absolute;
+      bottom: 28px;
+      left: 28px;
+      width: 132px;
+      height: 132px;
+      background: rgba(38, 36, 35, 0.55);
+      border: 3px solid #a8a29e;
+      outline: 2px solid #000;
+      pointer-events: auto;
+      touch-action: none;
+    }
+    #joystick-knob {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 52px;
+      height: 52px;
+      margin-top: -26px;
+      margin-left: -26px;
+      background: #f59e0b;
+      border-top: 3px solid #fde047;
+      border-left: 3px solid #fde047;
+      border-right: 3px solid #b45309;
+      border-bottom: 3px solid #b45309;
+      outline: 2px solid #000;
+      pointer-events: none;
+    }
+    #touch-look-zone {
+      position: absolute;
+      top: 0;
+      right: 0;
+      width: 60%;
+      height: 100%;
+      pointer-events: auto;
+      touch-action: none;
+    }
+    .mobile-action-btns {
+      position: absolute;
+      bottom: 34px;
+      right: 28px;
+      display: flex;
+      gap: 14px;
+      pointer-events: auto;
+    }
+    .mob-btn {
+      width: 78px;
+      height: 78px;
+      background: var(--mc-green-main);
+      border-top: 4px solid var(--mc-green-top);
+      border-left: 4px solid var(--mc-green-top);
+      border-right: 4px solid var(--mc-green-bottom);
+      border-bottom: 5px solid var(--mc-green-bottom);
+      outline: 2px solid #000;
+      color: #fff;
+      font-weight: 900;
+      font-size: 13px;
+      text-shadow: 2px 2px 0 #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+    }
+    .mob-btn:active {
+      transform: translateY(3px);
+    }
+    .mob-btn.sprint {
+      width: 64px;
+      height: 64px;
+      background: #0284c7;
+      border-top-color: #38bdf8;
+      border-left-color: #38bdf8;
+      border-right-color: #0369a1;
+      border-bottom-color: #0369a1;
+      align-self: flex-end;
+    }
+    #btn-mobile-pause {
+      position: absolute;
+      top: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 8px 16px;
+      background: var(--mc-stone-panel);
+      border: 2px solid #78716c;
+      outline: 2px solid #000;
+      color: #fff;
+      font-weight: 900;
+      text-shadow: 1px 1px 0 #000;
+      pointer-events: auto;
+    }
+
+    /* ════════════════════════════════════════════════════════════════════════
+       МЕНЮ И ОВЕРЛЕИ С 3D-ЛОГОТИПОМ И КАРТОЧКАМИ БИОМОВ
+       ════════════════════════════════════════════════════════════════════════ */
+    .overlay-screen {
+      position: fixed;
+      inset: 0;
+      z-index: 20;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: radial-gradient(circle at center, rgba(12, 10, 9, 0.35), rgba(12, 10, 9, 0.82));
+      padding: 16px;
+    }
+    .overlay-screen.active {
+      display: flex;
+    }
+
+    /* Массивное каменное окно с деревянно-золотой окантовкой */
+    .mc-window {
+      background:
+        repeating-linear-gradient(
+          0deg,
+          rgba(255, 255, 255, 0.015) 0px,
+          rgba(255, 255, 255, 0.015) 4px,
+          transparent 4px,
+          transparent 8px
+        ),
+        var(--mc-stone-panel);
+      border-top: 5px solid #6e6a66;
+      border-left: 5px solid #6e6a66;
+      border-right: 5px solid #1c1917;
+      border-bottom: 6px solid #1c1917;
+      outline: 3px solid #000;
+      padding: 24px 26px;
+      max-width: 610px;
+      width: 100%;
+      text-align: center;
+      box-shadow: 0 22px 0 rgba(0, 0, 0, 0.55), 0 28px 48px rgba(0, 0, 0, 0.85);
+      position: relative;
+      animation: mcPop 0.2s cubic-bezier(0.18, 0.89, 0.32, 1.28);
+    }
+
+    @keyframes mcPop {
+      from { transform: scale(0.92); opacity: 0; }
+      to { transform: scale(1); opacity: 1; }
+    }
+
+    .mc-header-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+
+    .badge-emeralds {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: #14532d;
+      border-top: 2px solid #4ade80;
+      border-left: 2px solid #4ade80;
+      border-right: 2px solid #052e16;
+      border-bottom: 3px solid #052e16;
+      outline: 2px solid #000;
+      color: #86efac;
+      padding: 5px 12px;
+      font-weight: 900;
+      font-size: 14px;
+      text-shadow: 2px 2px 0 #000;
+    }
+
+    .badge-version {
+      background: #451a03;
+      border: 2px solid #f59e0b;
+      outline: 2px solid #000;
+      color: #fde047;
+      padding: 4px 10px;
+      font-size: 11px;
+      font-weight: 900;
+      text-shadow: 1px 1px 0 #000;
+      letter-spacing: 0.5px;
+    }
+
+    /* 3D Блочный логотип игры в духе официального логотипа Minecraft */
+    .mc-logo-wrap {
+      position: relative;
+      margin: 4px 0 16px;
+      padding: 6px 0;
+    }
+    .mc-logo-main {
+      font-size: 40px;
+      font-weight: 900;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: #f8fafc;
+      text-shadow:
+        0 2px 0 #cbd5e1,
+        0 4px 0 #64748b,
+        0 6px 0 #334155,
+        0 8px 0 #0f172a,
+        4px 8px 0 #000,
+        -2px -2px 0 #000,
+        2px -2px 0 #000;
+      line-height: 1.05;
+    }
+    .mc-logo-sub {
+      display: inline-block;
+      margin-top: 4px;
+      background: linear-gradient(90deg, #f59e0b, #ea580c);
+      border: 2px solid #fef08a;
+      outline: 2px solid #000;
+      padding: 2px 14px;
+      font-size: 13px;
+      font-weight: 900;
+      color: #fff;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      text-shadow: 2px 2px 0 #000;
+      transform: rotate(-1.5deg);
+    }
+
+    /* Жёлтый пульсирующий сплэш-текст, как в главном меню Minecraft! */
+    .mc-splash {
+      position: absolute;
+      right: 12px;
+      bottom: -4px;
+      color: #fde047;
+      font-size: 13px;
+      font-weight: 900;
+      text-shadow: 2px 2px 0 #3f2e04, -1px -1px 0 #000;
+      transform: rotate(-14deg);
+      animation: splashPulse 0.65s infinite alternate ease-in-out;
+      pointer-events: none;
+    }
+    @keyframes splashPulse {
+      from { transform: rotate(-14deg) scale(0.95); }
+      to { transform: rotate(-14deg) scale(1.08); }
+    }
+
+    /* Сетка выбора карт с превью-картинками биомов */
+    .level-selector {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+
+    .lvl-card {
+      background: #1c1917;
+      border-top: 3px solid #57534e;
+      border-left: 3px solid #57534e;
+      border-right: 3px solid #0c0a09;
+      border-bottom: 4px solid #0c0a09;
+      outline: 2px solid #000;
+      padding: 8px;
+      cursor: pointer;
+      text-align: left;
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      transition: transform 0.1s;
+      color: #fff;
+    }
+    .lvl-card:hover {
+      background: #292524;
+      transform: translateY(-2px);
+    }
+    .lvl-card.selected {
+      background: #14532d;
+      border-top-color: #4ade80;
+      border-left-color: #4ade80;
+      border-right-color: #052e16;
+      border-bottom-color: #052e16;
+      outline: 3px solid #fde047;
+    }
+
+    .lvl-thumb {
+      width: 78px;
+      height: 54px;
+      object-fit: cover;
+      border: 2px solid #000;
+      image-rendering: pixelated;
+      flex-shrink: 0;
+      background: #0f172a;
+    }
+
+    .lvl-info {
+      overflow: hidden;
+      flex: 1;
+    }
+    .lvl-title {
+      font-weight: 900;
+      font-size: 14px;
+      color: #fff;
+      text-shadow: 2px 2px 0 #000;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .lvl-desc {
+      font-size: 11px;
+      color: #d6d3d1;
+      margin-top: 2px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .lvl-time {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 900;
+      color: #fde047;
+      text-shadow: 1px 1px 0 #000;
+      margin-top: 4px;
+    }
+
+    /* Кнопки с объёмной пиксельной фаской и тактильным нажатием */
+    .btn-group {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .btn-row {
+      display: flex;
+      gap: 10px;
+    }
+    .btn-row .btn {
+      flex: 1;
+    }
+
+    .btn {
+      padding: 13px 18px;
+      font-size: 16px;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: #fff;
+      text-shadow: 2px 2px 0 #000;
+      cursor: pointer;
+      outline: 2px solid #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: filter 0.1s, transform 0.06s;
+    }
+    .btn:hover {
+      filter: brightness(1.1);
+    }
+    .btn:active {
+      transform: translateY(3px);
+    }
+
+    .btn-primary {
+      background: var(--mc-green-main);
+      border-top: 4px solid var(--mc-green-top);
+      border-left: 4px solid var(--mc-green-top);
+      border-right: 4px solid var(--mc-green-bottom);
+      border-bottom: 6px solid var(--mc-green-bottom);
+    }
+    .btn-rewarded {
+      background: var(--mc-gold-main);
+      border-top: 4px solid var(--mc-gold-top);
+      border-left: 4px solid var(--mc-gold-top);
+      border-right: 4px solid var(--mc-gold-bottom);
+      border-bottom: 6px solid var(--mc-gold-bottom);
+    }
+    .btn-secondary {
+      background: #57534e;
+      border-top: 4px solid #a8a29e;
+      border-left: 4px solid #a8a29e;
+      border-right: 4px solid #292524;
+      border-bottom: 6px solid #292524;
+    }
+
+    /* Статистика на экране финиша */
+    .stats-box {
+      background: #1c1917;
+      border: 3px solid #44403c;
+      outline: 2px solid #000;
+      padding: 14px;
+      margin: 14px 0;
+      display: flex;
+      justify-content: space-around;
+    }
+    .stat-item {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .stat-label {
+      font-size: 12px;
+      font-weight: 800;
+      color: #a8a29e;
+      text-transform: uppercase;
+    }
+    .stat-val {
+      font-size: 22px;
+      font-weight: 900;
+      color: #fde047;
+      text-shadow: 2px 2px 0 #000;
+    }
+
+    /* Таблица лидеров */
+    .leaderboard-list {
+      max-height: 240px;
+      overflow-y: auto;
+      margin: 14px 0;
+      text-align: left;
+      background: #1c1917;
+      border: 3px solid #44403c;
+      outline: 2px solid #000;
+      padding: 6px;
+    }
+    .lb-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 9px 12px;
+      border-bottom: 2px solid #292524;
+      font-size: 14px;
+      font-weight: 800;
+      text-shadow: 1px 1px 0 #000;
+    }
+    .lb-row:last-child { border-bottom: none; }
+    .lb-rank { color: #38bdf8; width: 34px; }
+    .lb-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .lb-score { color: #fde047; font-variant-numeric: tabular-nums; }
+
+    @media (max-width: 600px) {
+      .level-selector { grid-template-columns: 1fr; }
+      .mc-logo-main { font-size: 28px; }
+      .mc-splash { display: none; }
+    }
+  </style>
+  <script type="module" crossorigin src="./assets/index-BiiIfcV-.js"></script>
+</head>
+<body>
+  <div id="game-container"></div>
+  <div id="crosshair"></div>
+  <div id="toast-banner">Чекпоинт сохранён!</div>
+
+  <!-- Игровой HUD + Хотбар в стиле Minecraft -->
+  <div id="hud">
+    <div class="hud-top">
+      <div class="mc-plaque">
+        <div id="hud-level-name" style="font-weight: 900; font-size: 16px; color: #4ade80;">1. Грибная река</div>
+        <div id="hud-checkpoint" class="hud-sub">Чекпоинт: Старт</div>
+        <div id="hud-ghost-status" class="hud-sub" style="color: #38bdf8;">👻 Призраков на карте: 1</div>
+      </div>
+      <div class="mc-plaque" style="text-align: right;">
+        <div id="hud-timer" class="hud-timer">00:00.00</div>
+        <div id="hud-best" class="hud-sub">Рекорд: --:--.--</div>
+      </div>
+    </div>
+
+      <!-- Нижний хотбар инвентаря как в настоящем Minecraft -->
+    <div class="mc-hotbar-wrap" id="desktop-hint">
+      <div class="mc-xp-bar"><div class="mc-xp-fill"></div></div>
+      <div class="mc-hotbar">
+        <div class="mc-slot active-slot" title="ЛКМ — Удар ножом / F — Осмотр ножа">🗡️<span>F / ЛКМ</span></div>
+        <div class="mc-slot" title="WASD — Движение">👢<span>WASD</span></div>
+        <div class="mc-slot" title="Space — Прыжок (держите для авто-прыжка!)">🪶<span>ПРЫЖОК</span></div>
+        <div class="mc-slot" title="Shift — Спринт">⚡<span>СПРИНТ</span></div>
+        <div class="mc-slot" title="R — Быстрый рестарт">🧭<span>R-СТАРТ</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Мобильное управление -->
+  <div id="mobile-controls">
+    <button id="btn-mobile-pause">⏸ ПАУЗА</button>
+    <div id="joystick-zone">
+      <div id="joystick-knob"></div>
+    </div>
+    <div id="touch-look-zone"></div>
+    <div class="mobile-action-btns">
+      <button id="btn-mobile-inspect" class="mob-btn sprint" style="background:#eab308; border-color:#fde047;">🗡️ ФЛИП</button>
+      <button id="btn-mobile-sprint" class="mob-btn sprint">СПРИНТ</button>
+      <button id="btn-mobile-jump" class="mob-btn">ПРЫЖОК</button>
+    </div>
+  </div>
+
+  <!-- Главное меню -->
+  <div id="screen-menu" class="overlay-screen active">
+    <div class="mc-window">
+      <div class="mc-header-bar">
+        <div class="badge-emeralds">💎 Изумруды: <span id="menu-coins">0</span></div>
+        <div class="badge-version">BSL SHADERS • 60 FPS</div>
+      </div>
+
+      <div class="mc-logo-wrap">
+        <div class="mc-logo-main">CRAFT PARKOUR</div>
+        <div class="mc-logo-sub">Воксельный Спидран от 1-го лица</div>
+        <div class="mc-splash">Реальная физика!</div>
+      </div>
+
+      <div id="level-list" class="level-selector"></div>
+
+      <div class="btn-group">
+        <button id="btn-play" class="btn btn-primary">▶ НАЧАТЬ ЗАБЕГ В МИРЕ</button>
+        <button id="btn-armory" class="btn btn-rewarded">🗡️ АРСЕНАЛ НОЖЕЙ CS2 (СКИНЫ И ДОНАТ)</button>
+        <div class="btn-row">
+          <button id="btn-leaderboard" class="btn btn-secondary">🏆 Таблица лидеров</button>
+          <button id="btn-sound-toggle" class="btn btn-secondary">🔊 Звук: ВКЛ</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Экран паузы -->
+  <div id="screen-pause" class="overlay-screen">
+    <div class="mc-window" style="max-width: 440px;">
+      <div class="mc-logo-main" style="font-size: 30px; margin-bottom: 6px;">ИГРА НА ПАУЗЕ</div>
+      <p style="color: #d6d3d1; margin-bottom: 18px; font-weight: 700;">Передохните перед следующим прыжком</p>
+      <div class="btn-group">
+        <button id="btn-resume" class="btn btn-primary">▶ Вернуться в игру</button>
+        <button id="btn-pause-restart" class="btn btn-secondary">🔄 Начать уровень заново (R)</button>
+        <button id="btn-pause-menu" class="btn btn-secondary">🏠 Выбор биома (Меню)</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Экран падения в реку / лаву -->
+  <div id="screen-dead" class="overlay-screen">
+    <div class="mc-window" style="max-width: 460px;">
+      <div class="mc-logo-main" style="font-size: 32px; color: #f87171; margin-bottom: 6px;">ВЫ СОРВАЛИСЬ!</div>
+      <p id="dead-reason" style="color: #fde047; margin-bottom: 18px; font-weight: 800; text-shadow: 1px 1px 0 #000;">
+        Вы упали в глубокую реку!
+      </p>
+      <div class="btn-group">
+        <button id="btn-dead-checkpoint" class="btn btn-rewarded">
+          🎬 Возродиться на чекпоинте (Реклама)
+        </button>
+        <button id="btn-dead-restart" class="btn btn-primary">
+          🔄 С начала карты (Мгновенно • R)
+        </button>
+        <button id="btn-dead-menu" class="btn btn-secondary">🏠 В главное меню</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Экран финиша -->
+  <div id="screen-finish" class="overlay-screen">
+    <div class="mc-window" style="max-width: 480px;">
+      <div class="mc-logo-main" style="font-size: 32px; color: #4ade80;">БИОМ ПРОЙДЕН!</div>
+      <p id="finish-level-title" style="color: #fde047; font-weight: 800; margin-top: 4px;">Уровень завершён</p>
+
+      <div class="stats-box">
+        <div class="stat-item">
+          <span class="stat-label">Время</span>
+          <span id="finish-time" class="stat-val">00:00.00</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Рекорд</span>
+          <span id="finish-best" class="stat-val">00:00.00</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Награда</span>
+          <span id="finish-reward" class="stat-val" style="color: #4ade80;">+25 💎</span>
+        </div>
+      </div>
+
+      <div class="btn-group">
+        <button id="btn-finish-double" class="btn btn-rewarded">
+          🎬 Удвоить изумруды ×2 (Реклама)
+        </button>
+        <button id="btn-finish-next" class="btn btn-primary">⏭ Следующий биом</button>
+        <div class="btn-row">
+          <button id="btn-finish-replay" class="btn btn-secondary">🔄 Улучшить время</button>
+          <button id="btn-finish-menu" class="btn btn-secondary">🏠 Меню</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Таблица лидеров -->
+  <div id="screen-leaderboard" class="overlay-screen">
+    <div class="mc-window" style="max-width: 480px;">
+      <div class="mc-logo-main" style="font-size: 28px;">🏆 ТОП СПИДРАНЕРОВ</div>
+      <p style="color: #d6d3d1; font-size: 13px; font-weight: 700; margin-top: 4px;">
+        Глобальный рейтинг Яндекс Игр
+      </p>
+      <div id="leaderboard-entries" class="leaderboard-list"></div>
+      <div class="btn-group">
+        <button id="btn-lb-close" class="btn btn-primary">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Модальное окно Арсенала Ножей (CS2 Knives & Katana Shop) -->
+  <div id="screen-armory" class="overlay-screen">
+    <div class="mc-window" style="max-width: 620px;">
+      <div class="mc-header-bar">
+        <div class="badge-emeralds">💎 Баланс: <span id="armory-coins">0</span></div>
+        <button id="btn-armory-free-coins" class="badge-version" style="cursor:pointer; background:#15803d; border-color:#4ade80;">
+          🎬 +75 💎 Бесплатно (Реклама)
+        </button>
+      </div>
+      <div class="mc-logo-main" style="font-size: 28px;">🗡️ АРСЕНАЛ КЛИНКОВ CS2</div>
+      <p style="color: #fde047; font-size: 12px; font-weight: 800; margin: 4px 0 12px;">
+        В игре нажимайте [F] для 360°-осмотра на пальце и [ЛКМ] для удара!
+      </p>
+      <div id="armory-list" class="level-selector" style="max-height: 290px; overflow-y: auto;"></div>
+      <div class="btn-group">
+        <button id="btn-armory-close" class="btn btn-primary">Готово • В меню</button>
+      </div>
+    </div>
+  </div>
+
+</body>
+</html>
